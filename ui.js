@@ -7288,6 +7288,21 @@
     }
     throw new Error(`Invalid hex color: ${hex}`);
   }
+  function collectionHasAliases(variables) {
+    return variables.some(
+      (v) => Object.values(v.valuesByMode).some(
+        (val) => typeof val.value === "string" && val.value.startsWith("{")
+      )
+    );
+  }
+  function collectionHasColorVariables(variables) {
+    return variables.some((v) => v.type === "color");
+  }
+  function collectionHasNumericVariables(variables) {
+    return variables.some(
+      (v) => v.type === "number" || v.type === "spacing" || v.type === "borderRadius"
+    );
+  }
   function formatColor(value, format) {
     if (!value) return value;
     if (value.startsWith("{")) return value;
@@ -7509,13 +7524,14 @@
     }, [activeTab]);
     const [selectedCollectionId, setSelectedCollectionId] = React.useState("");
     const [selectedModeId, setSelectedModeId] = React.useState("all");
-    const [aliasDisplayMode, setAliasDisplayMode] = React.useState("resolved");
+    const [aliasDisplayMode, setAliasDisplayMode] = React.useState("alias");
     const [colorFormat, setColorFormat] = React.useState("hex");
     const [unitFormat, setUnitFormat] = React.useState("px");
     const [outputFormat, setOutputFormat] = React.useState("css");
     React.useEffect(() => {
       console.log("Output format changed to:", outputFormat);
     }, [outputFormat]);
+    const [unitPerVariable, setUnitPerVariable] = React.useState(/* @__PURE__ */ new Map());
     React.useEffect(() => {
       window.onmessage = (event) => {
         const { type, payload } = event.data.pluginMessage;
@@ -7547,6 +7563,21 @@
       setError(null);
       sendMessage({ type: "load-variables" });
     };
+    const handleRefreshVariables = () => {
+      setSelectedCollectionId("");
+      setSelectedModeId("all");
+      setVariables([]);
+      setModes([]);
+      setAliasDisplayMode("alias");
+      setColorFormat("hex");
+      setUnitFormat("px");
+      setOutputFormat("css");
+      setUnitPerVariable(/* @__PURE__ */ new Map());
+      setActiveTab("variables");
+      setLoading(true);
+      setError(null);
+      parent.postMessage({ pluginMessage: { type: "load-variables" } }, "*");
+    };
     const handleSelectCollection = (e) => {
       const newId = e.target.value;
       console.log("Selecting Collection ID:", newId);
@@ -7565,6 +7596,18 @@
       console.log("Selecting Mode ID:", newModeId);
       setSelectedModeId(newModeId);
     };
+    React.useEffect(() => {
+      if (modes.length === 1) {
+        console.log("Auto-selecting single mode:", modes[0].modeId);
+        setSelectedModeId(modes[0].modeId);
+      } else if (modes.length > 1) {
+        setSelectedModeId("all");
+      }
+    }, [modes]);
+    const hasAliases = React.useMemo(() => collectionHasAliases(variables), [variables]);
+    const hasColorVariables = React.useMemo(() => collectionHasColorVariables(variables), [variables]);
+    const hasNumericVariables = React.useMemo(() => collectionHasNumericVariables(variables), [variables]);
+    const showControls = selectedCollectionId && selectedModeId !== "all";
     const getDisplayValue = (v, modeId) => {
       const valObj = v.valuesByMode[modeId];
       if (!valObj) return { text: "---", isColor: false };
@@ -7589,15 +7632,6 @@
           finalText = formatColor(finalText, colorFormat);
         }
       }
-      if (!isResolvedMode && finalText.startsWith("{")) {
-      } else {
-        if (v.type === "number" || v.type === "spacing" || v.type === "borderRadius" || v.type === "typography") {
-          const num = parseFloat(finalText);
-          if (!isNaN(num)) {
-            finalText = formatUnit(num, unitFormat, 16);
-          }
-        }
-      }
       return { text: finalText, isColor, colorValue: colorHex };
     };
     const displayedVariables = variables.map((v) => {
@@ -7606,20 +7640,26 @@
       const displayValue = text || "---";
       return __spreadProps(__spreadValues({}, v), { displayValue, isColor, colorValue });
     });
-    return /* @__PURE__ */ React.createElement("div", { style: styles.container }, /* @__PURE__ */ React.createElement("div", { style: styles.header }, /* @__PURE__ */ React.createElement("div", { style: styles.titleRow }, /* @__PURE__ */ React.createElement("h1", { style: styles.title }, "Design Tokens Manager")), /* @__PURE__ */ React.createElement("div", { style: styles.tabs }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { style: styles.container }, /* @__PURE__ */ React.createElement("div", { style: styles.header }, /* @__PURE__ */ React.createElement("div", { style: styles.titleRow }, /* @__PURE__ */ React.createElement("h1", { style: styles.title }, "Design Tokens Manager"), collections.length > 0 && /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        style: __spreadProps(__spreadValues({}, styles.buttonSecondary), { fontSize: "11px", padding: "4px 8px" }),
+        onClick: handleRefreshVariables,
+        title: "Reload variables from Figma"
+      },
+      "\u21BB Refresh"
+    )), collections.length > 0 && /* @__PURE__ */ React.createElement("div", { style: styles.tabs }, /* @__PURE__ */ React.createElement(
       "button",
       {
         style: __spreadProps(__spreadValues({}, styles.tab), { borderBottom: activeTab === "variables" ? "2px solid #18a0fb" : "none", fontWeight: activeTab === "variables" ? 600 : 500 }),
         onClick: () => setActiveTab("variables")
       },
       "Variables"
-    ), /* @__PURE__ */ React.createElement(
+    ), selectedCollectionId && /* @__PURE__ */ React.createElement(
       "button",
       {
         style: __spreadProps(__spreadValues({}, styles.tab), { borderBottom: activeTab === "output" ? "2px solid #18a0fb" : "none", fontWeight: activeTab === "output" ? 600 : 500 }),
-        disabled: !selectedCollectionId,
-        onClick: () => setActiveTab("output"),
-        title: !selectedCollectionId ? "Select a collection first" : ""
+        onClick: () => setActiveTab("output")
       },
       "Output"
     ), /* @__PURE__ */ React.createElement(
@@ -7629,7 +7669,16 @@
         onClick: () => setActiveTab("specs")
       },
       "Spec"
-    ))), error && /* @__PURE__ */ React.createElement("div", { style: styles.error }, error), /* @__PURE__ */ React.createElement("div", { style: styles.content }, collections.length === 0 && /* @__PURE__ */ React.createElement("div", { style: styles.emptyState }, /* @__PURE__ */ React.createElement("button", { style: styles.buttonPrimary, onClick: handleLoadVariables, disabled: loading }, loading ? "Loading..." : "Load Figma Variables")), collections.length > 0 && /* @__PURE__ */ React.createElement(React.Fragment, null, activeTab === "variables" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", height: "100%", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { style: styles.controls }, /* @__PURE__ */ React.createElement("div", { style: styles.controlGroup }, /* @__PURE__ */ React.createElement("label", { style: styles.label }, "Collection"), /* @__PURE__ */ React.createElement(
+    ))), error && /* @__PURE__ */ React.createElement("div", { style: styles.error }, error), /* @__PURE__ */ React.createElement("div", { style: styles.content }, collections.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: styles.emptyState }, /* @__PURE__ */ React.createElement("button", { style: styles.buttonPrimary, onClick: handleLoadVariables, disabled: loading }, loading ? "Loading..." : "Load Figma Variables")) : !selectedCollectionId ? /* @__PURE__ */ React.createElement("div", { style: { padding: 20 } }, collections.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#666", padding: 32 } }, /* @__PURE__ */ React.createElement("p", null, "No variable collections found in this file."), /* @__PURE__ */ React.createElement("p", { style: { fontSize: "11px", marginTop: 8 } }, "Create variable collections in Figma to get started.")) : /* @__PURE__ */ React.createElement("div", { style: styles.controlGroup }, /* @__PURE__ */ React.createElement("label", { style: styles.label }, "Collection"), /* @__PURE__ */ React.createElement(
+      "select",
+      {
+        style: styles.select,
+        value: selectedCollectionId,
+        onChange: handleSelectCollection
+      },
+      /* @__PURE__ */ React.createElement("option", { value: "", disabled: true }, "Select a collection..."),
+      collections.map((c) => /* @__PURE__ */ React.createElement("option", { key: c.id, value: c.id }, c.name))
+    ))) : /* @__PURE__ */ React.createElement(React.Fragment, null, activeTab === "variables" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", height: "100%", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { style: styles.controls }, /* @__PURE__ */ React.createElement("div", { style: styles.controlGroup }, /* @__PURE__ */ React.createElement("label", { style: styles.label }, "Collection"), /* @__PURE__ */ React.createElement(
       "select",
       {
         style: styles.select,
@@ -7647,15 +7696,7 @@
       },
       /* @__PURE__ */ React.createElement("option", { value: "all" }, "All Modes (Default)"),
       modes.map((m) => /* @__PURE__ */ React.createElement("option", { key: m.modeId, value: m.modeId }, m.name))
-    )), selectedCollectionId && modes.length > 0 && /* @__PURE__ */ React.createElement("div", { style: styles.controlGroup }, /* @__PURE__ */ React.createElement("label", { style: styles.label }, "Values"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 12, alignItems: "center", height: "32px" } }, /* @__PURE__ */ React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 4, fontSize: "11px", cursor: "pointer" } }, /* @__PURE__ */ React.createElement(
-      "input",
-      {
-        type: "radio",
-        name: "aliasMode",
-        checked: aliasDisplayMode === "resolved",
-        onChange: () => setAliasDisplayMode("resolved")
-      }
-    ), "Resolve"), /* @__PURE__ */ React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 4, fontSize: "11px", cursor: "pointer" } }, /* @__PURE__ */ React.createElement(
+    )), selectedCollectionId && modes.length > 0 && /* @__PURE__ */ React.createElement("div", { style: styles.controlGroup }, /* @__PURE__ */ React.createElement("label", { style: styles.label }, "Values"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 12, alignItems: "center", height: "32px" } }, /* @__PURE__ */ React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 4, fontSize: "11px", cursor: "pointer" } }, /* @__PURE__ */ React.createElement(
       "input",
       {
         type: "radio",
@@ -7663,13 +7704,83 @@
         checked: aliasDisplayMode === "alias",
         onChange: () => setAliasDisplayMode("alias")
       }
-    ), "Alias"))), /* @__PURE__ */ React.createElement("div", { style: styles.controlGroup }, /* @__PURE__ */ React.createElement("label", { style: styles.label }, "Color"), /* @__PURE__ */ React.createElement("select", { style: styles.select, value: colorFormat, onChange: (e) => setColorFormat(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "hex" }, "Hex"), /* @__PURE__ */ React.createElement("option", { value: "rgb" }, "RGB"), /* @__PURE__ */ React.createElement("option", { value: "rgba" }, "RGBA"), /* @__PURE__ */ React.createElement("option", { value: "hsl" }, "HSL"), /* @__PURE__ */ React.createElement("option", { value: "hsla" }, "HSLA"), /* @__PURE__ */ React.createElement("option", { value: "oklch" }, "OKLCH"))), /* @__PURE__ */ React.createElement("div", { style: styles.controlGroup }, /* @__PURE__ */ React.createElement("label", { style: styles.label }, "Unit"), /* @__PURE__ */ React.createElement("select", { style: styles.select, value: unitFormat, onChange: (e) => setUnitFormat(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "px" }, "px"), /* @__PURE__ */ React.createElement("option", { value: "rem" }, "rem"), /* @__PURE__ */ React.createElement("option", { value: "em" }, "em")))), loading ? /* @__PURE__ */ React.createElement("div", { style: { padding: 20, textAlign: "center", color: "#666" } }, "Loading details...") : selectedCollectionId ? /* @__PURE__ */ React.createElement("div", { style: { flex: 1, overflow: "auto", border: "1px solid #e5e5e5", borderRadius: 4 } }, /* @__PURE__ */ React.createElement("table", { style: styles.table }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", { style: styles.th }, "Name"), /* @__PURE__ */ React.createElement("th", { style: styles.th }, "Type"), /* @__PURE__ */ React.createElement("th", { style: styles.th }, "Value ", selectedModeId !== "all" ? `(${(_a = modes.find((m) => m.modeId === selectedModeId)) == null ? void 0 : _a.name})` : "(Default)"))), /* @__PURE__ */ React.createElement("tbody", null, displayedVariables.map((v) => /* @__PURE__ */ React.createElement("tr", { key: v.id }, /* @__PURE__ */ React.createElement("td", { style: styles.td }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 500 } }, v.name)), /* @__PURE__ */ React.createElement("td", { style: styles.td }, /* @__PURE__ */ React.createElement("span", { style: styles.badge }, v.type)), /* @__PURE__ */ React.createElement("td", { style: styles.td }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, v.isColor && v.colorValue && /* @__PURE__ */ React.createElement("div", { style: {
+    ), "Alias"), /* @__PURE__ */ React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 4, fontSize: "11px", cursor: hasAliases ? "pointer" : "not-allowed", opacity: hasAliases ? 1 : 0.5 } }, /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "radio",
+        name: "aliasMode",
+        checked: aliasDisplayMode === "resolved",
+        onChange: () => setAliasDisplayMode("resolved"),
+        disabled: !hasAliases
+      }
+    ), "Resolve")), !hasAliases && /* @__PURE__ */ React.createElement("div", { style: { fontSize: "10px", color: "#999", fontStyle: "italic" } }, "This collection contains no aliases"))), /* @__PURE__ */ React.createElement("div", { style: styles.controlGroup }, /* @__PURE__ */ React.createElement("label", { style: styles.label }, "Color"), /* @__PURE__ */ React.createElement(
+      "select",
+      {
+        style: __spreadProps(__spreadValues({}, styles.select), { opacity: hasColorVariables ? 1 : 0.5 }),
+        value: colorFormat,
+        onChange: (e) => setColorFormat(e.target.value),
+        disabled: !hasColorVariables
+      },
+      /* @__PURE__ */ React.createElement("option", { value: "hex" }, "Hex"),
+      /* @__PURE__ */ React.createElement("option", { value: "rgb" }, "RGB"),
+      /* @__PURE__ */ React.createElement("option", { value: "rgba" }, "RGBA"),
+      /* @__PURE__ */ React.createElement("option", { value: "hsl" }, "HSL"),
+      /* @__PURE__ */ React.createElement("option", { value: "hsla" }, "HSLA"),
+      /* @__PURE__ */ React.createElement("option", { value: "oklch" }, "OKLCH")
+    ), !hasColorVariables && /* @__PURE__ */ React.createElement("div", { style: { fontSize: "10px", color: "#999", fontStyle: "italic", marginTop: 4 } }, "No color variables in this collection")), /* @__PURE__ */ React.createElement("div", { style: styles.controlGroup }, /* @__PURE__ */ React.createElement("label", { style: styles.label }, "Unit"), /* @__PURE__ */ React.createElement(
+      "select",
+      {
+        style: __spreadProps(__spreadValues({}, styles.select), { opacity: hasNumericVariables ? 1 : 0.5 }),
+        value: unitFormat,
+        onChange: (e) => {
+          const newUnit = e.target.value;
+          setUnitFormat(newUnit);
+          const newMap = /* @__PURE__ */ new Map();
+          variables.forEach((v) => {
+            if (v.type === "number" || v.type === "spacing" || v.type === "borderRadius") {
+              newMap.set(v.id, newUnit);
+            }
+          });
+          setUnitPerVariable(newMap);
+        },
+        disabled: !hasNumericVariables
+      },
+      /* @__PURE__ */ React.createElement("option", { value: "px" }, "px"),
+      /* @__PURE__ */ React.createElement("option", { value: "rem" }, "rem"),
+      /* @__PURE__ */ React.createElement("option", { value: "em" }, "em")
+    ), !hasNumericVariables && /* @__PURE__ */ React.createElement("div", { style: { fontSize: "10px", color: "#999", fontStyle: "italic", marginTop: 4 } }, "No numeric variables in this collection"))), loading ? /* @__PURE__ */ React.createElement("div", { style: { padding: 20, textAlign: "center", color: "#666" } }, "Loading details...") : selectedCollectionId ? /* @__PURE__ */ React.createElement("div", { style: { flex: 1, overflow: "auto", border: "1px solid #e5e5e5", borderRadius: 4 } }, /* @__PURE__ */ React.createElement("table", { style: styles.table }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", { style: styles.th }, "Name"), /* @__PURE__ */ React.createElement("th", { style: styles.th }, "Type"), /* @__PURE__ */ React.createElement("th", { style: styles.th }, "Value ", selectedModeId !== "all" ? `(${(_a = modes.find((m) => m.modeId === selectedModeId)) == null ? void 0 : _a.name})` : "(Default)"), /* @__PURE__ */ React.createElement("th", { style: styles.th }, "Unit"))), /* @__PURE__ */ React.createElement("tbody", null, displayedVariables.map((v) => /* @__PURE__ */ React.createElement("tr", { key: v.id }, /* @__PURE__ */ React.createElement("td", { style: styles.td }, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 500 } }, v.name)), /* @__PURE__ */ React.createElement("td", { style: styles.td }, /* @__PURE__ */ React.createElement("span", { style: styles.badge }, v.type)), /* @__PURE__ */ React.createElement("td", { style: styles.td }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, v.isColor && v.colorValue && /* @__PURE__ */ React.createElement("div", { style: {
       width: 16,
       height: 16,
       borderRadius: 4,
       background: v.colorValue,
       border: "1px solid #ddd"
-    } }), /* @__PURE__ */ React.createElement("code", { style: __spreadProps(__spreadValues({}, styles.code), { color: aliasDisplayMode === "alias" && v.displayValue.startsWith("{") ? "#f24822" : "inherit" }) }, v.displayValue))))), displayedVariables.length === 0 && /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { colSpan: 3, style: { padding: 24, textAlign: "center", color: "#999" } }, "No variables found in this collection."))))) : /* @__PURE__ */ React.createElement("div", { style: { padding: 20, textAlign: "center", color: "#888", fontStyle: "italic" } }, "Select a collection to view variables.")), activeTab === "output" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", height: "100%", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { style: styles.controls }, /* @__PURE__ */ React.createElement("div", { style: styles.controlGroup }, /* @__PURE__ */ React.createElement("label", { style: styles.label }, "Format"), /* @__PURE__ */ React.createElement("select", { style: styles.select, value: outputFormat, onChange: (e) => setOutputFormat(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "css" }, "CSS Variables"), /* @__PURE__ */ React.createElement("option", { value: "scss" }, "SCSS Variables"), /* @__PURE__ */ React.createElement("option", { value: "json" }, "JSON"), /* @__PURE__ */ React.createElement("option", { value: "dtcg" }, "Design Tokens (W3C)")))), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", flexDirection: "column", border: "1px solid #333", borderRadius: 6, overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: styles.toolbar }, /* @__PURE__ */ React.createElement("div", { style: styles.toolbarTitle }, "Output Preview"), /* @__PURE__ */ React.createElement(
+    } }), /* @__PURE__ */ React.createElement("code", { style: __spreadProps(__spreadValues({}, styles.code), { color: aliasDisplayMode === "alias" && v.displayValue.startsWith("{") ? "#f24822" : "inherit" }) }, v.displayValue))), /* @__PURE__ */ React.createElement("td", { style: styles.td }, (v.type === "number" || v.type === "spacing" || v.type === "borderRadius") && /* @__PURE__ */ React.createElement(
+      "select",
+      {
+        style: __spreadProps(__spreadValues({}, styles.select), { fontSize: "11px", padding: "2px 4px", minWidth: "60px" }),
+        value: unitPerVariable.get(v.id) || unitFormat,
+        onChange: (e) => {
+          const newMap = new Map(unitPerVariable);
+          newMap.set(v.id, e.target.value);
+          setUnitPerVariable(newMap);
+        }
+      },
+      /* @__PURE__ */ React.createElement("option", { value: "px" }, "px"),
+      /* @__PURE__ */ React.createElement("option", { value: "rem" }, "rem"),
+      /* @__PURE__ */ React.createElement("option", { value: "em" }, "em"),
+      /* @__PURE__ */ React.createElement("option", { value: "%" }, "%"),
+      /* @__PURE__ */ React.createElement("option", { value: "vw" }, "vw"),
+      /* @__PURE__ */ React.createElement("option", { value: "vh" }, "vh"),
+      /* @__PURE__ */ React.createElement("option", { value: "vmin" }, "vmin"),
+      /* @__PURE__ */ React.createElement("option", { value: "vmax" }, "vmax"),
+      /* @__PURE__ */ React.createElement("option", { value: "ch" }, "ch"),
+      /* @__PURE__ */ React.createElement("option", { value: "ex" }, "ex"),
+      /* @__PURE__ */ React.createElement("option", { value: "cm" }, "cm"),
+      /* @__PURE__ */ React.createElement("option", { value: "mm" }, "mm"),
+      /* @__PURE__ */ React.createElement("option", { value: "in" }, "in"),
+      /* @__PURE__ */ React.createElement("option", { value: "pt" }, "pt"),
+      /* @__PURE__ */ React.createElement("option", { value: "pc" }, "pc")
+    )))), displayedVariables.length === 0 && /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { colSpan: 3, style: { padding: 24, textAlign: "center", color: "#999" } }, "No variables found in this collection."))))) : /* @__PURE__ */ React.createElement("div", { style: { padding: 20, textAlign: "center", color: "#888", fontStyle: "italic" } }, "Select a collection to view variables.")), activeTab === "output" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", height: "100%", gap: 16 } }, selectedModeId && selectedModeId !== "all" ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.controls }, /* @__PURE__ */ React.createElement("div", { style: styles.controlGroup }, /* @__PURE__ */ React.createElement("label", { style: styles.label }, "Format"), /* @__PURE__ */ React.createElement("select", { style: styles.select, value: outputFormat, onChange: (e) => setOutputFormat(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "css" }, "CSS Variables"), /* @__PURE__ */ React.createElement("option", { value: "scss" }, "SCSS Variables"), /* @__PURE__ */ React.createElement("option", { value: "json" }, "JSON"), /* @__PURE__ */ React.createElement("option", { value: "dtcg" }, "Design Tokens (W3C)")))), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", flexDirection: "column", border: "1px solid #333", borderRadius: 6, overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: styles.toolbar }, /* @__PURE__ */ React.createElement("div", { style: styles.toolbarTitle }, "Output Preview"), /* @__PURE__ */ React.createElement(
       "button",
       {
         style: styles.buttonSecondary,
@@ -7705,7 +7816,7 @@
           baseFontSize: 16
         }, ((_c = collections.find((c) => c.id === selectedCollectionId)) == null ? void 0 : _c.name) || "Tokens")
       }
-    )), outputFormat === "dtcg" && /* @__PURE__ */ React.createElement("div", { style: { padding: 12, background: "#e6fffa", color: "#2c7a7b", borderRadius: 6, fontSize: "11px" } }, /* @__PURE__ */ React.createElement("strong", null, "Note:"), " W3C Design Tokens export uses the selected mode and formatting.")), activeTab === "specs" && /* @__PURE__ */ React.createElement("div", { style: { padding: 20, overflow: "auto" } }, /* @__PURE__ */ React.createElement("h2", null, "Design Tokens Specification"), /* @__PURE__ */ React.createElement("p", null, "This plugin supports the ", /* @__PURE__ */ React.createElement("a", { href: "https://tr.designtokens.org/format/", target: "_blank" }, "W3C Design Tokens Format Module"), "."), /* @__PURE__ */ React.createElement("h3", null, "Key Concepts"), /* @__PURE__ */ React.createElement("ul", null, /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("strong", null, "$value"), ": The actual value of the token."), /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("strong", null, "$type"), ": The type of token (color, number, dimension, etc)."), /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("strong", null, "Nesting"), ": Tokens are organized in a hierarchy typically derived from their name (e.g. `color/brand/primary`).")), /* @__PURE__ */ React.createElement("h3", null, "Aliases"), /* @__PURE__ */ React.createElement("p", null, "References to other tokens are wrapped in curly braces, e.g., ", /* @__PURE__ */ React.createElement("code", null, `{color.brand.primary}`), "."), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 20, padding: 12, background: "#f0f0f0", borderRadius: 4 } }, /* @__PURE__ */ React.createElement("code", null, `{
+    )), outputFormat === "dtcg" && /* @__PURE__ */ React.createElement("div", { style: { padding: 12, background: "#e6fffa", color: "#2c7a7b", borderRadius: 6, fontSize: "11px" } }, /* @__PURE__ */ React.createElement("strong", null, "Note:"), " W3C Design Tokens export uses the selected mode and formatting.")) : /* @__PURE__ */ React.createElement("div", { style: { padding: 32, textAlign: "center", color: "#666" } }, /* @__PURE__ */ React.createElement("p", { style: { fontSize: "14px", marginBottom: 8 } }, "Select a mode to see output"), /* @__PURE__ */ React.createElement("p", { style: { fontSize: "11px", color: "#999" } }, modes.length === 0 ? "Load a collection with modes first." : "Choose a mode from the Variables tab."))), activeTab === "specs" && /* @__PURE__ */ React.createElement("div", { style: { padding: 20, overflow: "auto" } }, /* @__PURE__ */ React.createElement("h2", null, "Design Tokens Specification"), /* @__PURE__ */ React.createElement("p", null, "This plugin supports the ", /* @__PURE__ */ React.createElement("a", { href: "https://tr.designtokens.org/format/", target: "_blank" }, "W3C Design Tokens Format Module"), "."), /* @__PURE__ */ React.createElement("h3", null, "Key Concepts"), /* @__PURE__ */ React.createElement("ul", null, /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("strong", null, "$value"), ": The actual value of the token."), /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("strong", null, "$type"), ": The type of token (color, number, dimension, etc)."), /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("strong", null, "Nesting"), ": Tokens are organized in a hierarchy typically derived from their name (e.g. `color/brand/primary`).")), /* @__PURE__ */ React.createElement("h3", null, "Aliases"), /* @__PURE__ */ React.createElement("p", null, "References to other tokens are wrapped in curly braces, e.g., ", /* @__PURE__ */ React.createElement("code", null, `{color.brand.primary}`), "."), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 20, padding: 12, background: "#f0f0f0", borderRadius: 4 } }, /* @__PURE__ */ React.createElement("code", null, `{
   "color": {
     "brand": {
       "$value": "#000000",

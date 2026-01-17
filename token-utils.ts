@@ -3,7 +3,7 @@
  * Functions for reading/writing tokens from Figma API
  */
 
-import { DesignTokens, TokenType, Token, TokenValue, TokenReference, TokenMetadata } from './token-types';
+import { DesignTokens, TokenType, Token, TokenValue, TokenReference, TokenMetadata, CollectionVariableDetail } from './token-types';
 
 /**
  * Convert RGBA color to hex string
@@ -114,6 +114,35 @@ export function getNestedTokenValue(tokens: DesignTokens, path: string[]): Token
   }
 
   return current as Token | null;
+}
+
+/**
+ * Check if a collection has any alias references
+ */
+export function collectionHasAliases(variables: CollectionVariableDetail[]): boolean {
+  return variables.some(v =>
+    Object.values(v.valuesByMode).some(val =>
+      typeof val.value === 'string' && val.value.startsWith('{')
+    )
+  );
+}
+
+/**
+ * Check if a collection has any color variables
+ */
+export function collectionHasColorVariables(variables: CollectionVariableDetail[]): boolean {
+  return variables.some(v => v.type === 'color');
+}
+
+/**
+ * Check if a collection has any numeric variables
+ */
+export function collectionHasNumericVariables(variables: CollectionVariableDetail[]): boolean {
+  return variables.some(v =>
+    v.type === 'number' ||
+    v.type === 'spacing' ||
+    v.type === 'borderRadius'
+  );
 }
 
 /**

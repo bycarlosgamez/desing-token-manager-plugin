@@ -5,7 +5,7 @@ import { TokenProvider, useTokenStore } from './token-store';
 import { VariableTable } from './VariableTable';
 import { MappingView } from './MappingView';
 import { generateExport } from './token-export';
-import { formatColor, formatUnit } from './token-utils';
+import { formatColor, formatUnit, collectionHasAliases, collectionHasColorVariables, collectionHasNumericVariables } from './token-utils';
 
 console.log('UI Script: Starting execution...');
 
@@ -51,7 +51,7 @@ const App: React.FC = () => {
   }, [activeTab]);
   const [selectedCollectionId, setSelectedCollectionId] = React.useState<string>(''); // Controlled
   const [selectedModeId, setSelectedModeId] = React.useState<string>('all'); // Controlled
-  const [aliasDisplayMode, setAliasDisplayMode] = React.useState<'resolved' | 'alias'>('resolved');
+  const [aliasDisplayMode, setAliasDisplayMode] = React.useState<'resolved' | 'alias'>('alias');
 
   // Formatting & Output State
   const [colorFormat, setColorFormat] = React.useState<string>('hex');
@@ -62,6 +62,9 @@ const App: React.FC = () => {
   React.useEffect(() => {
     console.log('Output format changed to:', outputFormat);
   }, [outputFormat]);
+
+  // Per-variable unit selection (map: variableId -> unit)
+  const [unitPerVariable, setUnitPerVariable] = React.useState<Map<string, string>>(new Map());
 
   // Listen for messages
   React.useEffect(() => {
@@ -101,6 +104,25 @@ const App: React.FC = () => {
     sendMessage({ type: 'load-variables' });
   };
 
+  const handleRefreshVariables = () => {
+    // Reset all state to defaults
+    setSelectedCollectionId('');
+    setSelectedModeId('all');
+    setVariables([]);
+    setModes([]);
+    setAliasDisplayMode('alias');
+    setColorFormat('hex');
+    setUnitFormat('px');
+    setOutputFormat('css');
+    setUnitPerVariable(new Map());
+    setActiveTab('variables');
+
+    // Reload variables
+    setLoading(true);
+    setError(null);
+    parent.postMessage({ pluginMessage: { type: 'load-variables' } }, '*');
+  };
+
   const handleSelectCollection = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newId = e.target.value;
     console.log('Selecting Collection ID:', newId);
@@ -123,10 +145,22 @@ const App: React.FC = () => {
     setSelectedModeId(newModeId);
   };
 
-  // Filter variables for display
-  // "Display only variables belonging to Selected collection" -> Already handled by 'variables' state being fetched per collection
-  // "Selected mode" -> We store valuesByMode. We need to grab the right value.
-  // Helper to get display value
+  // Auto-select single mode when modes load
+  React.useEffect(() => {
+    if (modes.length === 1) {
+      console.log('Auto-selecting single mode:', modes[0].modeId);
+      setSelectedModeId(modes[0].modeId);
+    } else if (modes.length > 1) {
+      // Reset to default when multiple modes
+      setSelectedModeId('all');
+    }
+  }, [modes]);
+
+  // Computed values for progressive disclosure and type detection
+  const hasAliases = React.useMemo(() => collectionHasAliases(variables), [variables]);
+  const hasColorVariables = React.useMemo(() => collectionHasColorVariables(variables), [variables]);
+  const hasNumericVariables = React.useMemo(() => collectionHasNumericVariables(variables), [variables]);
+  const showControls = selectedCollectionId && selectedModeId !== 'all';
   const getDisplayValue = (v: CollectionVariableDetail, modeId: string): { text: string, isColor: boolean, colorValue?: string } => {
     const valObj = v.valuesByMode[modeId];
     if (!valObj) return { text: '---', isColor: false };
@@ -159,17 +193,8 @@ const App: React.FC = () => {
       }
     }
 
-    // Unit handling
-    if (!isResolvedMode && finalText.startsWith('{')) {
-      // skip
-    } else {
-      if (v.type === 'number' || v.type === 'spacing' || v.type === 'borderRadius' || v.type === 'typography') {
-        const num = parseFloat(finalText);
-        if (!isNaN(num)) {
-          finalText = formatUnit(num, unitFormat, 16);
-        }
-      }
-    }
+    // For numeric variables, keep only the number (unit will be in separate column)
+    // No unit formatting applied here anymore
 
     return { text: finalText, isColor, colorValue: colorHex };
   };
@@ -192,47 +217,78 @@ const App: React.FC = () => {
       <div style={styles.header}>
         <div style={styles.titleRow}>
           <h1 style={styles.title}>Design Tokens Manager</h1>
+          {collections.length > 0 && (
+            <button
+              style={{ ...styles.buttonSecondary, fontSize: '11px', padding: '4px 8px' }}
+              onClick={handleRefreshVariables}
+              title="Reload variables from Figma"
+            >
+              ↻ Refresh
+            </button>
+          )}
         </div>
-        <div style={styles.tabs}>
-          <button
-            style={{ ...styles.tab, borderBottom: activeTab === 'variables' ? '2px solid #18a0fb' : 'none', fontWeight: activeTab === 'variables' ? 600 : 500 }}
-            onClick={() => setActiveTab('variables')}
-          >
-            Variables
-          </button>
-          <button
-            style={{ ...styles.tab, borderBottom: activeTab === 'output' ? '2px solid #18a0fb' : 'none', fontWeight: activeTab === 'output' ? 600 : 500 }}
-            disabled={!selectedCollectionId}
-            onClick={() => setActiveTab('output')}
-            title={!selectedCollectionId ? "Select a collection first" : ""}
-          >
-            Output
-          </button>
-          <button
-            style={{ ...styles.tab, borderBottom: activeTab === 'specs' ? '2px solid #18a0fb' : 'none', fontWeight: activeTab === 'specs' ? 600 : 500 }}
-            onClick={() => setActiveTab('specs')}
-          >
-            Spec
-          </button>
-        </div>
+        {/* Only show tabs after variables are loaded */}
+        {collections.length > 0 && (
+          <div style={styles.tabs}>
+            <button
+              style={{ ...styles.tab, borderBottom: activeTab === 'variables' ? '2px solid #18a0fb' : 'none', fontWeight: activeTab === 'variables' ? 600 : 500 }}
+              onClick={() => setActiveTab('variables')}
+            >
+              Variables
+            </button>
+            {/* Only show Output tab after collection is selected */}
+            {selectedCollectionId && (
+              <button
+                style={{ ...styles.tab, borderBottom: activeTab === 'output' ? '2px solid #18a0fb' : 'none', fontWeight: activeTab === 'output' ? 600 : 500 }}
+                onClick={() => setActiveTab('output')}
+              >
+                Output
+              </button>
+            )}
+            <button
+              style={{ ...styles.tab, borderBottom: activeTab === 'specs' ? '2px solid #18a0fb' : 'none', fontWeight: activeTab === 'specs' ? 600 : 500 }}
+              onClick={() => setActiveTab('specs')}
+            >
+              Spec
+            </button>
+          </div>
+        )}
       </div>
 
       {error && <div style={styles.error}>{error}</div>}
 
       <div style={styles.content}>
-        {/* 1. LOAD */}
-        {collections.length === 0 && (
+        {/* 1. LOAD OR SELECT COLLECTION */}
+        {collections.length === 0 ? (
           <div style={styles.emptyState}>
             <button style={styles.buttonPrimary} onClick={handleLoadVariables} disabled={loading}>
               {loading ? 'Loading...' : 'Load Figma Variables'}
             </button>
           </div>
-        )}
-
-
-
-        {/* 2. SELECT & VIEW */}
-        {collections.length > 0 && (
+        ) : !selectedCollectionId ? (
+          <div style={{ padding: 20 }}>
+            {collections.length === 0 ? (
+              <div style={{ textAlign: 'center', color: '#666', padding: 32 }}>
+                <p>No variable collections found in this file.</p>
+                <p style={{ fontSize: '11px', marginTop: 8 }}>Create variable collections in Figma to get started.</p>
+              </div>
+            ) : (
+              <div style={styles.controlGroup}>
+                <label style={styles.label}>Collection</label>
+                <select
+                  style={styles.select}
+                  value={selectedCollectionId}
+                  onChange={handleSelectCollection}
+                >
+                  <option value="" disabled>Select a collection...</option>
+                  {collections.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        ) : (
           <>
             {activeTab === 'variables' && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 16 }}>
@@ -274,33 +330,45 @@ const App: React.FC = () => {
                   {selectedCollectionId && modes.length > 0 && (
                     <div style={styles.controlGroup}>
                       <label style={styles.label}>Values</label>
-                      <div style={{ display: 'flex', gap: 12, alignItems: 'center', height: '32px' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', cursor: 'pointer' }}>
-                          <input
-                            type="radio"
-                            name="aliasMode"
-                            checked={aliasDisplayMode === 'resolved'}
-                            onChange={() => setAliasDisplayMode('resolved')}
-                          />
-                          Resolve
-                        </label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', cursor: 'pointer' }}>
-                          <input
-                            type="radio"
-                            name="aliasMode"
-                            checked={aliasDisplayMode === 'alias'}
-                            onChange={() => setAliasDisplayMode('alias')}
-                          />
-                          Alias
-                        </label>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center', height: '32px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="radio"
+                              name="aliasMode"
+                              checked={aliasDisplayMode === 'alias'}
+                              onChange={() => setAliasDisplayMode('alias')}
+                            />
+                            Alias
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', cursor: hasAliases ? 'pointer' : 'not-allowed', opacity: hasAliases ? 1 : 0.5 }}>
+                            <input
+                              type="radio"
+                              name="aliasMode"
+                              checked={aliasDisplayMode === 'resolved'}
+                              onChange={() => setAliasDisplayMode('resolved')}
+                              disabled={!hasAliases}
+                            />
+                            Resolve
+                          </label>
+                        </div>
+                        {!hasAliases && (
+                          <div style={{ fontSize: '10px', color: '#999', fontStyle: 'italic' }}>
+                            This collection contains no aliases
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
-
                   {/* FORMATTING CONTROLS */}
                   <div style={styles.controlGroup}>
                     <label style={styles.label}>Color</label>
-                    <select style={styles.select} value={colorFormat} onChange={(e) => setColorFormat(e.target.value)}>
+                    <select
+                      style={{ ...styles.select, opacity: hasColorVariables ? 1 : 0.5 }}
+                      value={colorFormat}
+                      onChange={(e) => setColorFormat(e.target.value)}
+                      disabled={!hasColorVariables}
+                    >
                       <option value="hex">Hex</option>
                       <option value="rgb">RGB</option>
                       <option value="rgba">RGBA</option>
@@ -308,14 +376,40 @@ const App: React.FC = () => {
                       <option value="hsla">HSLA</option>
                       <option value="oklch">OKLCH</option>
                     </select>
+                    {!hasColorVariables && (
+                      <div style={{ fontSize: '10px', color: '#999', fontStyle: 'italic', marginTop: 4 }}>
+                        No color variables in this collection
+                      </div>
+                    )}
                   </div>
                   <div style={styles.controlGroup}>
                     <label style={styles.label}>Unit</label>
-                    <select style={styles.select} value={unitFormat} onChange={(e) => setUnitFormat(e.target.value)}>
+                    <select
+                      style={{ ...styles.select, opacity: hasNumericVariables ? 1 : 0.5 }}
+                      value={unitFormat}
+                      onChange={(e) => {
+                        const newUnit = e.target.value;
+                        setUnitFormat(newUnit);
+                        // Update all numeric variables to the new global unit
+                        const newMap = new Map<string, string>();
+                        variables.forEach(v => {
+                          if (v.type === 'number' || v.type === 'spacing' || v.type === 'borderRadius') {
+                            newMap.set(v.id, newUnit);
+                          }
+                        });
+                        setUnitPerVariable(newMap);
+                      }}
+                      disabled={!hasNumericVariables}
+                    >
                       <option value="px">px</option>
                       <option value="rem">rem</option>
                       <option value="em">em</option>
                     </select>
+                    {!hasNumericVariables && (
+                      <div style={{ fontSize: '10px', color: '#999', fontStyle: 'italic', marginTop: 4 }}>
+                        No numeric variables in this collection
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -331,6 +425,7 @@ const App: React.FC = () => {
                             <th style={styles.th}>Name</th>
                             <th style={styles.th}>Type</th>
                             <th style={styles.th}>Value {selectedModeId !== 'all' ? `(${modes.find(m => m.modeId === selectedModeId)?.name})` : '(Default)'}</th>
+                            <th style={styles.th}>Unit</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -358,6 +453,35 @@ const App: React.FC = () => {
                                   </code>
                                 </div>
                               </td>
+                              <td style={styles.td}>
+                                {(v.type === 'number' || v.type === 'spacing' || v.type === 'borderRadius') && (
+                                  <select
+                                    style={{ ...styles.select, fontSize: '11px', padding: '2px 4px', minWidth: '60px' }}
+                                    value={unitPerVariable.get(v.id) || unitFormat}
+                                    onChange={(e) => {
+                                      const newMap = new Map(unitPerVariable);
+                                      newMap.set(v.id, e.target.value);
+                                      setUnitPerVariable(newMap);
+                                    }}
+                                  >
+                                    <option value="px">px</option>
+                                    <option value="rem">rem</option>
+                                    <option value="em">em</option>
+                                    <option value="%">%</option>
+                                    <option value="vw">vw</option>
+                                    <option value="vh">vh</option>
+                                    <option value="vmin">vmin</option>
+                                    <option value="vmax">vmax</option>
+                                    <option value="ch">ch</option>
+                                    <option value="ex">ex</option>
+                                    <option value="cm">cm</option>
+                                    <option value="mm">mm</option>
+                                    <option value="in">in</option>
+                                    <option value="pt">pt</option>
+                                    <option value="pc">pc</option>
+                                  </select>
+                                )}
+                              </td>
                             </tr>
                           ))}
                           {displayedVariables.length === 0 && (
@@ -382,57 +506,70 @@ const App: React.FC = () => {
             {/* OUTPUT TAB */}
             {activeTab === 'output' && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 16 }}>
-                <div style={styles.controls}>
-                  <div style={styles.controlGroup}>
-                    <label style={styles.label}>Format</label>
-                    <select style={styles.select} value={outputFormat} onChange={(e) => setOutputFormat(e.target.value as any)}>
-                      <option value="css">CSS Variables</option>
-                      <option value="scss">SCSS Variables</option>
-                      <option value="json">JSON</option>
-                      <option value="dtcg">Design Tokens (W3C)</option>
-                    </select>
-                  </div>
-                </div>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px solid #333', borderRadius: 6, overflow: 'hidden' }}>
-                  <div style={styles.toolbar}>
-                    <div style={styles.toolbarTitle}>Output Preview</div>
-                    <button
-                      style={styles.buttonSecondary}
-                      onClick={() => {
-                        const el = document.createElement('textarea');
-                        el.value = generateExport(variables, {
+                {selectedModeId && selectedModeId !== 'all' ? (
+                  <>
+                    <div style={styles.controls}>
+                      <div style={styles.controlGroup}>
+                        <label style={styles.label}>Format</label>
+                        <select style={styles.select} value={outputFormat} onChange={(e) => setOutputFormat(e.target.value as any)}>
+                          <option value="css">CSS Variables</option>
+                          <option value="scss">SCSS Variables</option>
+                          <option value="json">JSON</option>
+                          <option value="dtcg">Design Tokens (W3C)</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px solid #333', borderRadius: 6, overflow: 'hidden' }}>
+                      <div style={styles.toolbar}>
+                        <div style={styles.toolbarTitle}>Output Preview</div>
+                        <button
+                          style={styles.buttonSecondary}
+                          onClick={() => {
+                            const el = document.createElement('textarea');
+                            el.value = generateExport(variables, {
+                              format: outputFormat,
+                              modeId: selectedModeId !== 'all' ? selectedModeId : (modes[0]?.modeId || ''),
+                              aliasMode: aliasDisplayMode,
+                              colorFormat,
+                              unitFormat,
+                              baseFontSize: 16,
+                              unitPerVariable: unitPerVariable
+                            }, collections.find(c => c.id === selectedCollectionId)?.name || 'Tokens');
+                            document.body.appendChild(el);
+                            el.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(el);
+                          }}
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <textarea
+                        readOnly
+                        style={styles.codeBlock}
+                        value={generateExport(variables, {
                           format: outputFormat,
                           modeId: selectedModeId !== 'all' ? selectedModeId : (modes[0]?.modeId || ''),
                           aliasMode: aliasDisplayMode,
                           colorFormat,
                           unitFormat,
-                          baseFontSize: 16
-                        }, collections.find(c => c.id === selectedCollectionId)?.name || 'Tokens');
-                        document.body.appendChild(el);
-                        el.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(el);
-                      }}
-                    >
-                      Copy
-                    </button>
-                  </div>
-                  <textarea
-                    readOnly
-                    style={styles.codeBlock}
-                    value={generateExport(variables, {
-                      format: outputFormat,
-                      modeId: selectedModeId !== 'all' ? selectedModeId : (modes[0]?.modeId || ''),
-                      aliasMode: aliasDisplayMode,
-                      colorFormat,
-                      unitFormat,
-                      baseFontSize: 16
-                    }, collections.find(c => c.id === selectedCollectionId)?.name || 'Tokens')}
-                  />
-                </div>
-                {outputFormat === 'dtcg' && (
-                  <div style={{ padding: 12, background: '#e6fffa', color: '#2c7a7b', borderRadius: 6, fontSize: '11px' }}>
-                    <strong>Note:</strong> W3C Design Tokens export uses the selected mode and formatting.
+                          baseFontSize: 16,
+                          unitPerVariable: unitPerVariable
+                        }, collections.find(c => c.id === selectedCollectionId)?.name || 'Tokens')}
+                      />
+                    </div>
+                    {outputFormat === 'dtcg' && (
+                      <div style={{ padding: 12, background: '#e6fffa', color: '#2c7a7b', borderRadius: 6, fontSize: '11px' }}>
+                        <strong>Note:</strong> W3C Design Tokens export uses the selected mode and formatting.
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ padding: 32, textAlign: 'center', color: '#666' }}>
+                    <p style={{ fontSize: '14px', marginBottom: 8 }}>Select a mode to see output</p>
+                    <p style={{ fontSize: '11px', color: '#999' }}>
+                      {modes.length === 0 ? 'Load a collection with modes first.' : 'Choose a mode from the Variables tab.'}
+                    </p>
                   </div>
                 )}
               </div>

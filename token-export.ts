@@ -8,6 +8,7 @@ export interface ExportOptions {
     colorFormat: string;
     unitFormat: string;
     baseFontSize: number;
+    unitPerVariable?: Map<string, string>;
 }
 
 export function generateExport(
@@ -44,7 +45,9 @@ function processValue(v: CollectionVariableDetail, options: ExportOptions): stri
     }
     if (v.type === 'number' || v.type === 'spacing' || v.type === 'borderRadius' || v.type === 'typography') {
         if (typeof rawValue === 'number' || !isNaN(Number(rawValue))) {
-            return formatUnit(Number(rawValue), options.unitFormat, options.baseFontSize);
+            // Use per-variable unit if available, otherwise use global unit
+            const unit = options.unitPerVariable?.get(v.id) || options.unitFormat;
+            return formatUnit(Number(rawValue), unit, options.baseFontSize);
         }
     }
 
