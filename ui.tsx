@@ -294,123 +294,131 @@ const App: React.FC = () => {
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 16 }}>
 
                 {/* CONTROLS */}
-                <div style={styles.controls}>
-                  <div style={styles.controlGroup}>
-                    <label style={styles.label}>Collection</label>
-                    <select
-                      style={styles.select}
-                      value={selectedCollectionId}
-                      onChange={handleSelectCollection}
-                    >
-                      <option value="" disabled>Select a collection...</option>
-                      {collections.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* MODE SELECTOR - Only show if modes exist */}
-                  {modes.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 12, background: '#fff', border: '1px solid #e5e5e5', borderRadius: 6 }}>
+                  {/* ROW 1: COLLECTION & MODE */}
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                     <div style={styles.controlGroup}>
-                      <label style={styles.label}>Mode</label>
+                      <label style={styles.label}>Collection</label>
                       <select
                         style={styles.select}
-                        value={selectedModeId}
-                        onChange={handleSelectMode}
+                        value={selectedCollectionId}
+                        onChange={handleSelectCollection}
                       >
-                        <option value="all">All Modes (Default)</option>
-                        {modes.map(m => (
-                          <option key={m.modeId} value={m.modeId}>{m.name}</option>
+                        <option value="" disabled>Select a collection...</option>
+                        {collections.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
                       </select>
                     </div>
-                  )}
 
-                  {/* ALIAS TOGGLE */}
-                  {selectedCollectionId && modes.length > 0 && (
+                    {modes.length > 0 && (
+                      <div style={styles.controlGroup}>
+                        <label style={styles.label}>Mode</label>
+                        <select
+                          style={styles.select}
+                          value={selectedModeId}
+                          onChange={handleSelectMode}
+                        >
+                          <option value="all">All Modes (Default)</option>
+                          {modes.map(m => (
+                            <option key={m.modeId} value={m.modeId}>{m.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ROW 2: FORMATTING (COLOR & UNIT) */}
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', borderTop: '1px solid #f5f5f5', paddingTop: 12 }}>
                     <div style={styles.controlGroup}>
-                      <label style={styles.label}>Values</label>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <div style={{ display: 'flex', gap: 12, alignItems: 'center', height: '32px' }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', cursor: 'pointer' }}>
-                            <input
-                              type="radio"
-                              name="aliasMode"
-                              checked={aliasDisplayMode === 'alias'}
-                              onChange={() => setAliasDisplayMode('alias')}
-                            />
-                            Alias
-                          </label>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', cursor: hasAliases ? 'pointer' : 'not-allowed', opacity: hasAliases ? 1 : 0.5 }}>
-                            <input
-                              type="radio"
-                              name="aliasMode"
-                              checked={aliasDisplayMode === 'resolved'}
-                              onChange={() => setAliasDisplayMode('resolved')}
-                              disabled={!hasAliases}
-                            />
-                            Resolve
-                          </label>
+                      <label style={styles.label}>Color</label>
+                      <select
+                        style={{ ...styles.select, opacity: hasColorVariables ? 1 : 0.5 }}
+                        value={colorFormat}
+                        onChange={(e) => setColorFormat(e.target.value)}
+                        disabled={!hasColorVariables}
+                      >
+                        <option value="hex">Hex</option>
+                        <option value="rgb">RGB</option>
+                        <option value="rgba">RGBA</option>
+                        <option value="hsl">HSL</option>
+                        <option value="hsla">HSLA</option>
+                        <option value="oklch">OKLCH</option>
+                      </select>
+                      {!hasColorVariables && (
+                        <div style={{ fontSize: '10px', color: '#999', fontStyle: 'italic', marginTop: 4 }}>
+                          No color variables in this collection
                         </div>
-                        {!hasAliases && (
-                          <div style={{ fontSize: '10px', color: '#999', fontStyle: 'italic' }}>
-                            This collection contains no aliases
+                      )}
+                    </div>
+
+                    <div style={styles.controlGroup}>
+                      <label style={styles.label}>Unit</label>
+                      <select
+                        style={{ ...styles.select, opacity: hasNumericVariables ? 1 : 0.5 }}
+                        value={unitFormat}
+                        onChange={(e) => {
+                          const newUnit = e.target.value;
+                          setUnitFormat(newUnit);
+                          // Update all numeric variables to the new global unit
+                          const newMap = new Map<string, string>();
+                          variables.forEach(v => {
+                            if (v.type === 'number' || v.type === 'spacing' || v.type === 'borderRadius') {
+                              newMap.set(v.id, newUnit);
+                            }
+                          });
+                          setUnitPerVariable(newMap);
+                        }}
+                        disabled={!hasNumericVariables}
+                      >
+                        <option value="px">px</option>
+                        <option value="rem">rem</option>
+                        <option value="em">em</option>
+                      </select>
+                      {!hasNumericVariables && (
+                        <div style={{ fontSize: '10px', color: '#999', fontStyle: 'italic', marginTop: 4 }}>
+                          No numeric variables in this collection
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ROW 3: VALUES (ALIAS / RESOLVE) */}
+                  {selectedCollectionId && modes.length > 0 && (
+                    <div style={{ borderTop: '1px solid #f5f5f5', paddingTop: 12 }}>
+                      <div style={styles.controlGroup}>
+                        <label style={styles.label}>Values</label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <div style={{ display: 'flex', gap: 12, alignItems: 'center', height: '32px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="radio"
+                                name="aliasMode"
+                                checked={aliasDisplayMode === 'alias'}
+                                onChange={() => setAliasDisplayMode('alias')}
+                              />
+                              Alias
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', cursor: hasAliases ? 'pointer' : 'not-allowed', opacity: hasAliases ? 1 : 0.5 }}>
+                              <input
+                                type="radio"
+                                name="aliasMode"
+                                checked={aliasDisplayMode === 'resolved'}
+                                onChange={() => setAliasDisplayMode('resolved')}
+                                disabled={!hasAliases}
+                              />
+                              Resolve
+                            </label>
                           </div>
-                        )}
+                          {!hasAliases && (
+                            <div style={{ fontSize: '10px', color: '#999', fontStyle: 'italic' }}>
+                              This collection contains no aliases
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
-                  {/* FORMATTING CONTROLS */}
-                  <div style={styles.controlGroup}>
-                    <label style={styles.label}>Color</label>
-                    <select
-                      style={{ ...styles.select, opacity: hasColorVariables ? 1 : 0.5 }}
-                      value={colorFormat}
-                      onChange={(e) => setColorFormat(e.target.value)}
-                      disabled={!hasColorVariables}
-                    >
-                      <option value="hex">Hex</option>
-                      <option value="rgb">RGB</option>
-                      <option value="rgba">RGBA</option>
-                      <option value="hsl">HSL</option>
-                      <option value="hsla">HSLA</option>
-                      <option value="oklch">OKLCH</option>
-                    </select>
-                    {!hasColorVariables && (
-                      <div style={{ fontSize: '10px', color: '#999', fontStyle: 'italic', marginTop: 4 }}>
-                        No color variables in this collection
-                      </div>
-                    )}
-                  </div>
-                  <div style={styles.controlGroup}>
-                    <label style={styles.label}>Unit</label>
-                    <select
-                      style={{ ...styles.select, opacity: hasNumericVariables ? 1 : 0.5 }}
-                      value={unitFormat}
-                      onChange={(e) => {
-                        const newUnit = e.target.value;
-                        setUnitFormat(newUnit);
-                        // Update all numeric variables to the new global unit
-                        const newMap = new Map<string, string>();
-                        variables.forEach(v => {
-                          if (v.type === 'number' || v.type === 'spacing' || v.type === 'borderRadius') {
-                            newMap.set(v.id, newUnit);
-                          }
-                        });
-                        setUnitPerVariable(newMap);
-                      }}
-                      disabled={!hasNumericVariables}
-                    >
-                      <option value="px">px</option>
-                      <option value="rem">rem</option>
-                      <option value="em">em</option>
-                    </select>
-                    {!hasNumericVariables && (
-                      <div style={{ fontSize: '10px', color: '#999', fontStyle: 'italic', marginTop: 4 }}>
-                        No numeric variables in this collection
-                      </div>
-                    )}
-                  </div>
                 </div>
 
                 {/* TABLE */}
@@ -424,7 +432,7 @@ const App: React.FC = () => {
                           <tr>
                             <th style={styles.th}>Name</th>
                             <th style={styles.th}>Type</th>
-                            <th style={styles.th}>Value {selectedModeId !== 'all' ? `(${modes.find(m => m.modeId === selectedModeId)?.name})` : '(Default)'}</th>
+                            <th style={styles.th}>Value</th>
                             <th style={styles.th}>Unit</th>
                           </tr>
                         </thead>
@@ -454,7 +462,7 @@ const App: React.FC = () => {
                                 </div>
                               </td>
                               <td style={styles.td}>
-                                {(v.type === 'number' || v.type === 'spacing' || v.type === 'borderRadius') && (
+                                {(v.type === 'number' || v.type === 'spacing' || v.type === 'borderRadius') ? (
                                   <select
                                     style={{ ...styles.select, fontSize: '11px', padding: '2px 4px', minWidth: '60px' }}
                                     value={unitPerVariable.get(v.id) || unitFormat}
@@ -480,6 +488,8 @@ const App: React.FC = () => {
                                     <option value="pt">pt</option>
                                     <option value="pc">pc</option>
                                   </select>
+                                ) : (
+                                  <span style={{ color: '#999', fontSize: '10px', fontStyle: 'italic' }}>Only for number types</span>
                                 )}
                               </td>
                             </tr>
