@@ -7445,9 +7445,9 @@
   function normalizeDotName(name) {
     return name.toLowerCase().replace(/\//g, ".").replace(/\s+/g, "-");
   }
-  function processValue(v, options) {
+  function processValue(v, modeId, options) {
     var _a;
-    const modeVal = v.valuesByMode[options.modeId];
+    const modeVal = v.valuesByMode[modeId];
     if (!modeVal) return "null";
     const isResolved = options.aliasMode === "resolved";
     let rawValue = modeVal.value;
@@ -7482,56 +7482,76 @@
     return String(rawValue);
   }
   function generateCSS(variables, options) {
-    const lines = [":root {"];
-    variables.forEach((v) => {
-      const val = processValue(v, options);
-      const name = normalizeDashName(v.name);
-      lines.push(`  --${name}: ${val};`);
+    const sections = [];
+    options.modes.forEach((mode) => {
+      const lines = [`/* Mode: ${mode.name} */`, ":root {"];
+      variables.forEach((v) => {
+        const val = processValue(v, mode.modeId, options);
+        const name = normalizeDashName(v.name);
+        lines.push(`  --${name}: ${val};`);
+      });
+      lines.push("}");
+      sections.push(lines.join("\n"));
     });
-    lines.push("}");
-    return lines.join("\n");
+    return sections.join("\n\n");
   }
   function generateSCSS(variables, options) {
-    const lines = [];
-    variables.forEach((v) => {
-      const val = processValue(v, options);
-      const name = normalizeDashName(v.name);
-      lines.push(`$${name}: ${val};`);
+    const sections = [];
+    options.modes.forEach((mode) => {
+      const lines = [`// Mode: ${mode.name}`];
+      variables.forEach((v) => {
+        const val = processValue(v, mode.modeId, options);
+        const name = normalizeDashName(v.name);
+        lines.push(`$${name}: ${val};`);
+      });
+      sections.push(lines.join("\n"));
     });
-    return lines.join("\n");
+    return sections.join("\n\n");
   }
   function generateJSON(variables, options) {
-    const obj = {};
-    variables.forEach((v) => {
-      const name = normalizeDotName(v.name);
-      obj[name] = processValue(v, options);
+    const root = {};
+    options.modes.forEach((mode) => {
+      const modeKey = mode.name.toLowerCase().replace(/\s+/g, "-");
+      const modeObj = {};
+      variables.forEach((v) => {
+        const name = normalizeDotName(v.name);
+        modeObj[name] = processValue(v, mode.modeId, options);
+      });
+      root[modeKey] = modeObj;
     });
-    return JSON.stringify(obj, null, 2);
+    return JSON.stringify(root, null, 2);
   }
   function generateDTCG(variables, options, collectionName) {
-    const root = {};
-    variables.forEach((v) => {
-      const val = processValue(v, options);
-      const path = v.name.split("/");
-      let current = root;
-      path.forEach((part, index) => {
-        const cleanPart = part.toLowerCase().replace(/\s+/g, "-");
-        if (!current[cleanPart]) current[cleanPart] = {};
-        if (index === path.length - 1) {
-          const leaf = {
-            $type: v.type,
-            $description: v.description
-          };
-          if (val && typeof val === "object" && val.$ref) {
-            leaf.$value = { $ref: val.$ref };
+    const root = {
+      $modes: {}
+    };
+    options.modes.forEach((mode) => {
+      const modeKey = mode.name.toLowerCase().replace(/\s+/g, "-");
+      const modeRoot = {};
+      variables.forEach((v) => {
+        const val = processValue(v, mode.modeId, options);
+        const path = v.name.split("/");
+        let current = modeRoot;
+        path.forEach((part, index) => {
+          const cleanPart = part.toLowerCase().replace(/\s+/g, "-");
+          if (!current[cleanPart]) current[cleanPart] = {};
+          if (index === path.length - 1) {
+            const leaf = {
+              $type: v.type,
+              $description: v.description
+            };
+            if (val && typeof val === "object" && val.$ref) {
+              leaf.$value = { $ref: val.$ref };
+            } else {
+              leaf.$value = val;
+            }
+            current[cleanPart] = leaf;
           } else {
-            leaf.$value = val;
+            current = current[cleanPart];
           }
-          current[cleanPart] = leaf;
-        } else {
-          current = current[cleanPart];
-        }
+        });
       });
+      root.$modes[modeKey] = modeRoot;
     });
     return JSON.stringify(root, null, 2);
   }
@@ -7542,7 +7562,7 @@
     return /* @__PURE__ */ React.createElement(App, null);
   };
   var App = () => {
-    var _a, _b;
+    var _a;
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState(null);
     const [collections, setCollections] = React.useState([]);
@@ -7815,17 +7835,18 @@
       {
         style: styles.buttonSecondary,
         onClick: () => {
-          var _a2, _b2;
+          var _a2;
+          const exportModes = selectedModeId === "all" ? modes.map((m) => ({ modeId: m.modeId, name: m.name })) : modes.filter((m) => m.modeId === selectedModeId).map((m) => ({ modeId: m.modeId, name: m.name }));
           const el = document.createElement("textarea");
           el.value = generateExport(variables, {
             format: outputFormat,
-            modeId: selectedModeId !== "all" ? selectedModeId : ((_a2 = modes[0]) == null ? void 0 : _a2.modeId) || "",
+            modes: exportModes,
             aliasMode: aliasDisplayMode,
             colorFormat,
             unitFormat,
             baseFontSize: 16,
             unitPerVariable
-          }, ((_b2 = collections.find((c) => c.id === selectedCollectionId)) == null ? void 0 : _b2.name) || "Tokens");
+          }, ((_a2 = collections.find((c) => c.id === selectedCollectionId)) == null ? void 0 : _a2.name) || "Tokens");
           document.body.appendChild(el);
           el.select();
           document.execCommand("copy");
@@ -7840,13 +7861,13 @@
         style: styles.codeBlock,
         value: generateExport(variables, {
           format: outputFormat,
-          modeId: selectedModeId !== "all" ? selectedModeId : ((_a = modes[0]) == null ? void 0 : _a.modeId) || "",
+          modes: selectedModeId === "all" ? modes.map((m) => ({ modeId: m.modeId, name: m.name })) : modes.filter((m) => m.modeId === selectedModeId).map((m) => ({ modeId: m.modeId, name: m.name })),
           aliasMode: aliasDisplayMode,
           colorFormat,
           unitFormat,
           baseFontSize: 16,
           unitPerVariable
-        }, ((_b = collections.find((c) => c.id === selectedCollectionId)) == null ? void 0 : _b.name) || "Tokens")
+        }, ((_a = collections.find((c) => c.id === selectedCollectionId)) == null ? void 0 : _a.name) || "Tokens")
       }
     )), outputFormat === "dtcg" && /* @__PURE__ */ React.createElement("div", { style: { padding: 12, background: "#e6fffa", color: "#2c7a7b", borderRadius: 6, fontSize: "11px" } }, /* @__PURE__ */ React.createElement("strong", null, "Note:"), " W3C Design Tokens export uses the selected mode and formatting.")) : /* @__PURE__ */ React.createElement("div", { style: { padding: 32, textAlign: "center", color: "#666" } }, /* @__PURE__ */ React.createElement("p", { style: { fontSize: "14px", marginBottom: 8 } }, "Select a collection to see output"), /* @__PURE__ */ React.createElement("p", { style: { fontSize: "11px", color: "#999" } }, "Load variables and choose a collection from the Variables tab."))), activeTab === "specs" && /* @__PURE__ */ React.createElement("div", { style: { padding: 20, overflow: "auto" } }, /* @__PURE__ */ React.createElement("h2", null, "Design Tokens Specification"), /* @__PURE__ */ React.createElement("p", null, "This plugin supports the ", /* @__PURE__ */ React.createElement("a", { href: "https://tr.designtokens.org/format/", target: "_blank" }, "W3C Design Tokens Format Module"), "."), /* @__PURE__ */ React.createElement("h3", null, "Key Concepts"), /* @__PURE__ */ React.createElement("ul", null, /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("strong", null, "$value"), ": The actual value of the token."), /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("strong", null, "$type"), ": The type of token (color, number, dimension, etc)."), /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("strong", null, "Nesting"), ": Tokens are organized in a hierarchy typically derived from their name (e.g. `color/brand/primary`).")), /* @__PURE__ */ React.createElement("h3", null, "Aliases"), /* @__PURE__ */ React.createElement("p", null, "References to other tokens are wrapped in curly braces, e.g., ", /* @__PURE__ */ React.createElement("code", null, `{color.brand.primary}`), "."), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 20, padding: 12, background: "#f0f0f0", borderRadius: 4 } }, /* @__PURE__ */ React.createElement("code", null, `{
   "color": {

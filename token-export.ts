@@ -1,9 +1,14 @@
 import { CollectionVariableDetail } from './token-types';
 import { formatColor, formatUnit } from './token-utils';
 
+export interface ExportMode {
+    modeId: string;
+    name: string;
+}
+
 export interface ExportOptions {
     format: 'css' | 'scss' | 'json' | 'dtcg';
-    modeId: string;
+    modes: ExportMode[];
     aliasMode: 'resolved' | 'alias';
     colorFormat: string;
     unitFormat: string;
@@ -33,8 +38,8 @@ function normalizeDotName(name: string): string {
     return name.toLowerCase().replace(/\//g, '.').replace(/\s+/g, '-');
 }
 
-function processValue(v: CollectionVariableDetail, options: ExportOptions): any {
-    const modeVal = v.valuesByMode[options.modeId];
+function processValue(v: CollectionVariableDetail, modeId: string, options: ExportOptions): any {
+    const modeVal = v.valuesByMode[modeId];
     if (!modeVal) return 'null';
 
     const isResolved = options.aliasMode === 'resolved';
@@ -81,70 +86,92 @@ function processValue(v: CollectionVariableDetail, options: ExportOptions): any 
 }
 
 function generateCSS(variables: CollectionVariableDetail[], options: ExportOptions): string {
-    const lines = [':root {'];
-    variables.forEach(v => {
-        const val = processValue(v, options);
-        const name = normalizeDashName(v.name);
-        lines.push(`  --${name}: ${val};`);
+    const sections: string[] = [];
+
+    options.modes.forEach(mode => {
+        const lines = [`/* Mode: ${mode.name} */`, ':root {'];
+        variables.forEach(v => {
+            const val = processValue(v, mode.modeId, options);
+            const name = normalizeDashName(v.name);
+            lines.push(`  --${name}: ${val};`);
+        });
+        lines.push('}');
+        sections.push(lines.join('\n'));
     });
-    lines.push('}');
-    return lines.join('\n');
+
+    return sections.join('\n\n');
 }
 
 function generateSCSS(variables: CollectionVariableDetail[], options: ExportOptions): string {
-    const lines: string[] = [];
-    variables.forEach(v => {
-        const val = processValue(v, options);
-        const name = normalizeDashName(v.name);
-        lines.push(`$${name}: ${val};`);
+    const sections: string[] = [];
+    options.modes.forEach(mode => {
+        const lines: string[] = [`// Mode: ${mode.name}`];
+        variables.forEach(v => {
+            const val = processValue(v, mode.modeId, options);
+            const name = normalizeDashName(v.name);
+            lines.push(`$${name}: ${val};`);
+        });
+        sections.push(lines.join('\n'));
     });
-    return lines.join('\n');
+    return sections.join('\n\n');
 }
 
 function generateJSON(variables: CollectionVariableDetail[], options: ExportOptions): string {
-    const obj: any = {};
-    variables.forEach(v => {
-        const name = normalizeDotName(v.name);
-        obj[name] = processValue(v, options);
+    const root: any = {};
+
+    options.modes.forEach(mode => {
+        const modeKey = mode.name.toLowerCase().replace(/\s+/g, '-');
+        const modeObj: any = {};
+        variables.forEach(v => {
+            const name = normalizeDotName(v.name);
+            modeObj[name] = processValue(v, mode.modeId, options);
+        });
+        root[modeKey] = modeObj;
     });
-    return JSON.stringify(obj, null, 2);
+
+    return JSON.stringify(root, null, 2);
 }
 
 function generateDTCG(variables: CollectionVariableDetail[], options: ExportOptions, collectionName: string): string {
-    // W3C format requires nesting
-    const root: any = {};
+    // W3C format requires nesting. Adding $modes at the root.
+    const root: any = {
+        $modes: {}
+    };
 
-    variables.forEach(v => {
-        const val = processValue(v, options);
-        // Note: For DTCG nesting, we still use the path split by '/'
-        // But the internal $ref (set in processValue) is already dot-normalized
-        const path = v.name.split('/');
+    options.modes.forEach(mode => {
+        const modeKey = mode.name.toLowerCase().replace(/\s+/g, '-');
+        const modeRoot: any = {};
 
-        let current = root;
-        path.forEach((part, index) => {
-            // Clean up the key name for DTCG if needed (matches normalizeDotName logic but per-segment)
-            const cleanPart = part.toLowerCase().replace(/\s+/g, '-');
+        variables.forEach(v => {
+            const val = processValue(v, mode.modeId, options);
+            const path = v.name.split('/');
 
-            if (!current[cleanPart]) current[cleanPart] = {};
+            let current = modeRoot;
+            path.forEach((part, index) => {
+                const cleanPart = part.toLowerCase().replace(/\s+/g, '-');
 
-            if (index === path.length - 1) {
-                // Leaf
-                const leaf: any = {
-                    $type: v.type,
-                    $description: v.description
-                };
+                if (!current[cleanPart]) current[cleanPart] = {};
 
-                if (val && typeof val === 'object' && val.$ref) {
-                    leaf.$value = { $ref: val.$ref }; // Match user requested format: { "$value": { "$ref": "..." } }
+                if (index === path.length - 1) {
+                    const leaf: any = {
+                        $type: v.type,
+                        $description: v.description
+                    };
+
+                    if (val && typeof val === 'object' && val.$ref) {
+                        leaf.$value = { $ref: val.$ref };
+                    } else {
+                        leaf.$value = val;
+                    }
+
+                    current[cleanPart] = leaf;
                 } else {
-                    leaf.$value = val;
+                    current = current[cleanPart];
                 }
-
-                current[cleanPart] = leaf;
-            } else {
-                current = current[cleanPart];
-            }
+            });
         });
+
+        root.$modes[modeKey] = modeRoot;
     });
 
     return JSON.stringify(root, null, 2);

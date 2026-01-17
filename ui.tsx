@@ -540,10 +540,14 @@ const App: React.FC = () => {
                         <button
                           style={styles.buttonSecondary}
                           onClick={() => {
+                            const exportModes = selectedModeId === 'all'
+                              ? modes.map(m => ({ modeId: m.modeId, name: m.name }))
+                              : modes.filter(m => m.modeId === selectedModeId).map(m => ({ modeId: m.modeId, name: m.name }));
+
                             const el = document.createElement('textarea');
                             el.value = generateExport(variables, {
                               format: outputFormat,
-                              modeId: selectedModeId !== 'all' ? selectedModeId : (modes[0]?.modeId || ''),
+                              modes: exportModes,
                               aliasMode: aliasDisplayMode,
                               colorFormat,
                               unitFormat,
@@ -564,7 +568,9 @@ const App: React.FC = () => {
                         style={styles.codeBlock}
                         value={generateExport(variables, {
                           format: outputFormat,
-                          modeId: selectedModeId !== 'all' ? selectedModeId : (modes[0]?.modeId || ''),
+                          modes: selectedModeId === 'all'
+                            ? modes.map(m => ({ modeId: m.modeId, name: m.name }))
+                            : modes.filter(m => m.modeId === selectedModeId).map(m => ({ modeId: m.modeId, name: m.name })),
                           aliasMode: aliasDisplayMode,
                           colorFormat,
                           unitFormat,
