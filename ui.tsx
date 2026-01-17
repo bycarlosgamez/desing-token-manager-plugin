@@ -506,7 +506,7 @@ const App: React.FC = () => {
             {/* OUTPUT TAB */}
             {activeTab === 'output' && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 16 }}>
-                {selectedModeId && selectedModeId !== 'all' ? (
+                {selectedCollectionId && variables.length > 0 ? (
                   <>
                     <div style={styles.controls}>
                       <div style={styles.controlGroup}>
@@ -519,6 +519,11 @@ const App: React.FC = () => {
                         </select>
                       </div>
                     </div>
+                    {selectedModeId === 'all' && modes.length > 1 && (
+                      <div style={{ padding: 8, background: '#f0f9ff', color: '#0369a1', borderRadius: 4, fontSize: '11px' }}>
+                        <strong>Note:</strong> Showing values for all modes (using first mode as default)
+                      </div>
+                    )}
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', border: '1px solid #333', borderRadius: 6, overflow: 'hidden' }}>
                       <div style={styles.toolbar}>
                         <div style={styles.toolbarTitle}>Output Preview</div>
@@ -566,9 +571,9 @@ const App: React.FC = () => {
                   </>
                 ) : (
                   <div style={{ padding: 32, textAlign: 'center', color: '#666' }}>
-                    <p style={{ fontSize: '14px', marginBottom: 8 }}>Select a mode to see output</p>
+                    <p style={{ fontSize: '14px', marginBottom: 8 }}>Select a collection to see output</p>
                     <p style={{ fontSize: '11px', color: '#999' }}>
-                      {modes.length === 0 ? 'Load a collection with modes first.' : 'Choose a mode from the Variables tab.'}
+                      Load variables and choose a collection from the Variables tab.
                     </p>
                   </div>
                 )}

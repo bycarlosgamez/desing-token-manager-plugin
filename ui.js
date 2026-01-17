@@ -7440,6 +7440,7 @@
     }
   }
   function processValue(v, options) {
+    var _a;
     const modeVal = v.valuesByMode[options.modeId];
     if (!modeVal) return "null";
     const isResolved = options.aliasMode === "resolved";
@@ -7452,7 +7453,8 @@
     }
     if (v.type === "number" || v.type === "spacing" || v.type === "borderRadius" || v.type === "typography") {
       if (typeof rawValue === "number" || !isNaN(Number(rawValue))) {
-        return formatUnit(Number(rawValue), options.unitFormat, options.baseFontSize);
+        const unit = ((_a = options.unitPerVariable) == null ? void 0 : _a.get(v.id)) || options.unitFormat;
+        return formatUnit(Number(rawValue), unit, options.baseFontSize);
       }
     }
     return String(rawValue);
@@ -7780,7 +7782,7 @@
       /* @__PURE__ */ React.createElement("option", { value: "in" }, "in"),
       /* @__PURE__ */ React.createElement("option", { value: "pt" }, "pt"),
       /* @__PURE__ */ React.createElement("option", { value: "pc" }, "pc")
-    )))), displayedVariables.length === 0 && /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { colSpan: 3, style: { padding: 24, textAlign: "center", color: "#999" } }, "No variables found in this collection."))))) : /* @__PURE__ */ React.createElement("div", { style: { padding: 20, textAlign: "center", color: "#888", fontStyle: "italic" } }, "Select a collection to view variables.")), activeTab === "output" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", height: "100%", gap: 16 } }, selectedModeId && selectedModeId !== "all" ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.controls }, /* @__PURE__ */ React.createElement("div", { style: styles.controlGroup }, /* @__PURE__ */ React.createElement("label", { style: styles.label }, "Format"), /* @__PURE__ */ React.createElement("select", { style: styles.select, value: outputFormat, onChange: (e) => setOutputFormat(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "css" }, "CSS Variables"), /* @__PURE__ */ React.createElement("option", { value: "scss" }, "SCSS Variables"), /* @__PURE__ */ React.createElement("option", { value: "json" }, "JSON"), /* @__PURE__ */ React.createElement("option", { value: "dtcg" }, "Design Tokens (W3C)")))), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", flexDirection: "column", border: "1px solid #333", borderRadius: 6, overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: styles.toolbar }, /* @__PURE__ */ React.createElement("div", { style: styles.toolbarTitle }, "Output Preview"), /* @__PURE__ */ React.createElement(
+    )))), displayedVariables.length === 0 && /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { colSpan: 3, style: { padding: 24, textAlign: "center", color: "#999" } }, "No variables found in this collection."))))) : /* @__PURE__ */ React.createElement("div", { style: { padding: 20, textAlign: "center", color: "#888", fontStyle: "italic" } }, "Select a collection to view variables.")), activeTab === "output" && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", height: "100%", gap: 16 } }, selectedCollectionId && variables.length > 0 ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.controls }, /* @__PURE__ */ React.createElement("div", { style: styles.controlGroup }, /* @__PURE__ */ React.createElement("label", { style: styles.label }, "Format"), /* @__PURE__ */ React.createElement("select", { style: styles.select, value: outputFormat, onChange: (e) => setOutputFormat(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "css" }, "CSS Variables"), /* @__PURE__ */ React.createElement("option", { value: "scss" }, "SCSS Variables"), /* @__PURE__ */ React.createElement("option", { value: "json" }, "JSON"), /* @__PURE__ */ React.createElement("option", { value: "dtcg" }, "Design Tokens (W3C)")))), selectedModeId === "all" && modes.length > 1 && /* @__PURE__ */ React.createElement("div", { style: { padding: 8, background: "#f0f9ff", color: "#0369a1", borderRadius: 4, fontSize: "11px" } }, /* @__PURE__ */ React.createElement("strong", null, "Note:"), " Showing values for all modes (using first mode as default)"), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", flexDirection: "column", border: "1px solid #333", borderRadius: 6, overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: styles.toolbar }, /* @__PURE__ */ React.createElement("div", { style: styles.toolbarTitle }, "Output Preview"), /* @__PURE__ */ React.createElement(
       "button",
       {
         style: styles.buttonSecondary,
@@ -7793,7 +7795,8 @@
             aliasMode: aliasDisplayMode,
             colorFormat,
             unitFormat,
-            baseFontSize: 16
+            baseFontSize: 16,
+            unitPerVariable
           }, ((_b2 = collections.find((c) => c.id === selectedCollectionId)) == null ? void 0 : _b2.name) || "Tokens");
           document.body.appendChild(el);
           el.select();
@@ -7813,10 +7816,11 @@
           aliasMode: aliasDisplayMode,
           colorFormat,
           unitFormat,
-          baseFontSize: 16
+          baseFontSize: 16,
+          unitPerVariable
         }, ((_c = collections.find((c) => c.id === selectedCollectionId)) == null ? void 0 : _c.name) || "Tokens")
       }
-    )), outputFormat === "dtcg" && /* @__PURE__ */ React.createElement("div", { style: { padding: 12, background: "#e6fffa", color: "#2c7a7b", borderRadius: 6, fontSize: "11px" } }, /* @__PURE__ */ React.createElement("strong", null, "Note:"), " W3C Design Tokens export uses the selected mode and formatting.")) : /* @__PURE__ */ React.createElement("div", { style: { padding: 32, textAlign: "center", color: "#666" } }, /* @__PURE__ */ React.createElement("p", { style: { fontSize: "14px", marginBottom: 8 } }, "Select a mode to see output"), /* @__PURE__ */ React.createElement("p", { style: { fontSize: "11px", color: "#999" } }, modes.length === 0 ? "Load a collection with modes first." : "Choose a mode from the Variables tab."))), activeTab === "specs" && /* @__PURE__ */ React.createElement("div", { style: { padding: 20, overflow: "auto" } }, /* @__PURE__ */ React.createElement("h2", null, "Design Tokens Specification"), /* @__PURE__ */ React.createElement("p", null, "This plugin supports the ", /* @__PURE__ */ React.createElement("a", { href: "https://tr.designtokens.org/format/", target: "_blank" }, "W3C Design Tokens Format Module"), "."), /* @__PURE__ */ React.createElement("h3", null, "Key Concepts"), /* @__PURE__ */ React.createElement("ul", null, /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("strong", null, "$value"), ": The actual value of the token."), /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("strong", null, "$type"), ": The type of token (color, number, dimension, etc)."), /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("strong", null, "Nesting"), ": Tokens are organized in a hierarchy typically derived from their name (e.g. `color/brand/primary`).")), /* @__PURE__ */ React.createElement("h3", null, "Aliases"), /* @__PURE__ */ React.createElement("p", null, "References to other tokens are wrapped in curly braces, e.g., ", /* @__PURE__ */ React.createElement("code", null, `{color.brand.primary}`), "."), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 20, padding: 12, background: "#f0f0f0", borderRadius: 4 } }, /* @__PURE__ */ React.createElement("code", null, `{
+    )), outputFormat === "dtcg" && /* @__PURE__ */ React.createElement("div", { style: { padding: 12, background: "#e6fffa", color: "#2c7a7b", borderRadius: 6, fontSize: "11px" } }, /* @__PURE__ */ React.createElement("strong", null, "Note:"), " W3C Design Tokens export uses the selected mode and formatting.")) : /* @__PURE__ */ React.createElement("div", { style: { padding: 32, textAlign: "center", color: "#666" } }, /* @__PURE__ */ React.createElement("p", { style: { fontSize: "14px", marginBottom: 8 } }, "Select a collection to see output"), /* @__PURE__ */ React.createElement("p", { style: { fontSize: "11px", color: "#999" } }, "Load variables and choose a collection from the Variables tab."))), activeTab === "specs" && /* @__PURE__ */ React.createElement("div", { style: { padding: 20, overflow: "auto" } }, /* @__PURE__ */ React.createElement("h2", null, "Design Tokens Specification"), /* @__PURE__ */ React.createElement("p", null, "This plugin supports the ", /* @__PURE__ */ React.createElement("a", { href: "https://tr.designtokens.org/format/", target: "_blank" }, "W3C Design Tokens Format Module"), "."), /* @__PURE__ */ React.createElement("h3", null, "Key Concepts"), /* @__PURE__ */ React.createElement("ul", null, /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("strong", null, "$value"), ": The actual value of the token."), /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("strong", null, "$type"), ": The type of token (color, number, dimension, etc)."), /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("strong", null, "Nesting"), ": Tokens are organized in a hierarchy typically derived from their name (e.g. `color/brand/primary`).")), /* @__PURE__ */ React.createElement("h3", null, "Aliases"), /* @__PURE__ */ React.createElement("p", null, "References to other tokens are wrapped in curly braces, e.g., ", /* @__PURE__ */ React.createElement("code", null, `{color.brand.primary}`), "."), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 20, padding: 12, background: "#f0f0f0", borderRadius: 4 } }, /* @__PURE__ */ React.createElement("code", null, `{
   "color": {
     "brand": {
       "$value": "#000000",
